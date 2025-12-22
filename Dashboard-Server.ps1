@@ -204,6 +204,83 @@ try {
                 $response.OutputStream.Write($buffer, 0, $buffer.Length)
             }
         }
+        elseif ($url -eq "/api/upload" -and $method -eq "POST") {
+            # Handle file upload
+            try {
+                $boundary = $request.ContentType.Split('=')[1]
+                $memoryStream = New-Object System.IO.MemoryStream
+                $request.InputStream.CopyTo($memoryStream)
+                $content = [System.Text.Encoding]::UTF8.GetString($memoryStream.ToArray())
+                $memoryStream.Close()
+                
+                # Parse multipart form data
+                $parts = $content -split "--$boundary"
+                $filesUploaded = 0
+                $baselineFile = Join-Path $BasePath "Baseline.txt"
+                
+                foreach ($part in $parts) {
+                    if ($part -match 'filename="([^"]+)"') {
+                        $filename = $matches[1]
+                        
+                        # Extract file content (after double line break)
+                        $headerEnd = $part.IndexOf("`r`n`r`n")
+                        if ($headerEnd -gt 0) {
+                            $fileContent = $part.Substring($headerEnd + 4)
+                            # Remove trailing boundary markers
+                            if ($fileContent.EndsWith("`r`n")) {
+                                $fileContent = $fileContent.Substring(0, $fileContent.Length - 2)
+                            }
+                            
+                            # Save file to FIM directory
+                            $targetPath = Join-Path $BasePath $filename
+                            $bytes = [System.Text.Encoding]::UTF8.GetBytes($fileContent)
+                            [System.IO.File]::WriteAllBytes($targetPath, $bytes)
+                            
+                            # Calculate hash and add to baseline
+                            $hash = Get-FileHash -Path $targetPath -Algorithm SHA512
+                            "$($hash.Path)|$($hash.Hash)" | Out-File -FilePath $baselineFile -Append
+                            
+                            # Log as baseline
+                            $changeEntry = @{
+                                Timestamp = (Get-Date).ToString("yyyy-MM-dd HH:mm:ss")
+                                FilePath = $targetPath
+                                ChangeType = "Baseline"
+                                Hash = $hash.Hash
+                                VersionId = [System.Guid]::NewGuid().ToString()
+                            }
+                            
+                            $ChangesLogPath = Join-Path $BasePath "changes.log"
+                            $changeEntry | ConvertTo-Json -Compress | Out-File -FilePath $ChangesLogPath -Append
+                            
+                            $filesUploaded++
+                            Write-Host "File uploaded and added to baseline: $filename" -ForegroundColor Green
+                        }
+                    }
+                }
+                
+                $responseData = @{
+                    success = $true
+                    filesUploaded = $filesUploaded
+                    message = "$filesUploaded file(s) uploaded successfully"
+                } | ConvertTo-Json
+                
+                $buffer = [System.Text.Encoding]::UTF8.GetBytes($responseData)
+                $response.ContentType = "application/json"
+                $response.ContentLength64 = $buffer.Length
+                $response.OutputStream.Write($buffer, 0, $buffer.Length)
+            } catch {
+                Write-Host "Error uploading files: $_" -ForegroundColor Red
+                $responseData = @{
+                    success = $false
+                    message = "Upload error: $_"
+                } | ConvertTo-Json
+                
+                $buffer = [System.Text.Encoding]::UTF8.GetBytes($responseData)
+                $response.ContentType = "application/json"
+                $response.ContentLength64 = $buffer.Length
+                $response.OutputStream.Write($buffer, 0, $buffer.Length)
+            }
+        }
         elseif ($url -match "\.(html|css|js)$") {
             # Serve static files
             $filePath = Join-Path $DashboardPath ($url.TrimStart('/'))

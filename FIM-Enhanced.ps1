@@ -5,7 +5,7 @@
 Write-Host ""
 Write-Host "=== File Integrity Monitor with Version Control ===" -ForegroundColor Cyan
 Write-Host "What would you like to do?"
-Write-Host "A) Collect new baseline"
+Write-Host "A) Collect new baseline (monitor files in original location)"
 Write-Host "B) Start monitoring files with saved baseline"
 Write-Host "C) Launch Dashboard"
 Write-Host "D) Reset Credentials"
@@ -172,29 +172,27 @@ if ($response -ieq "A") {
     # Delete any baselines that already exist
     EraseBaseline
 
-    # Add new files to FIM folder
-    $source = Read-Host "Enter the path of file/folder you want to add"
+    # Get path to monitor
+    $source = Read-Host "Enter the path of file/folder you want to monitor"
 
+    $filesToMonitor = @()
+    
     if (Test-Path $source -PathType Leaf) {
-        Copy-Item -Path $source -Destination $BasePath -Force
-        Write-Host "Added file: $source"
+        $filesToMonitor += Get-Item $source
+        Write-Host "Monitoring file: $source"
     } elseif (Test-Path $source -PathType Container) {
-        Copy-Item -Path "$source\*" -Destination $BasePath -Recurse -Force
-        Write-Host "Added files from folder: $source"
+        $filesToMonitor = Get-ChildItem -Path $source -File -Recurse
+        Write-Host "Monitoring folder: $source"
     } else {
         Write-Host "Invalid path! Exiting..." 
         exit
     }
 
-    # Collect all files in FIM folder (exclude system files)
-    $files = Get-ChildItem -Path $BasePath -File -Recurse | 
-             Where-Object { $_.Name -notmatch "(Baseline\.txt|changes\.log|credentials\.enc)" -and $_.DirectoryName -notmatch "Versions" }
-
-    Write-Host "`n== Files in FIM Folder =="
-    $files | Select-Object FullName
+    Write-Host "`n== Files to Monitor =="
+    $filesToMonitor | Select-Object FullName
 
     # For each file, calculate the hash and write to baseline.txt
-    foreach ($f in $files) {
+    foreach ($f in $filesToMonitor) {
         $hash = CalcHash $f.FullName
         "$($hash.path)|$($hash.Hash)" | Out-File -FilePath (Join-Path $BasePath "Baseline.txt") -Append
         
@@ -222,37 +220,31 @@ elseif ($response -ieq "B") {
     }
 
     Write-Host "Starting continuous monitoring... Press Ctrl+C to stop..." -ForegroundColor Cyan
+    Write-Host "Monitoring $($HashDirectory.Count) file(s)..." -ForegroundColor Yellow
     
     # Begin continuous monitoring files with saved baseline
     while($true) {
         Start-Sleep -Seconds 5
-        $files = Get-ChildItem -Path $BasePath -File -Recurse | 
-                 Where-Object { $_.Name -notmatch "(Baseline\.txt|changes\.log|credentials\.enc)" -and $_.DirectoryName -notmatch "Versions" }
 
-        # For each file, calculate the hash
-        foreach ($f in $files) {
-            $hash = CalcHash $f.FullName
+        # Monitor each file from the baseline (create array copy to avoid modification during enumeration)
+        $filePathsToCheck = @($HashDirectory.Keys)
+        foreach ($filePath in $filePathsToCheck) {
+            if (Test-Path -Path $filePath) {
+                $hash = CalcHash $filePath
 
-            if ($HashDirectory[$hash.Path] -eq $null) {
-                # A new file has been created
-                Write-Host "$($hash.Path) has been created!" -ForegroundColor Green
-                Log-Change -FilePath $hash.Path -ChangeType "Created" -Hash $hash.Hash -BasePath $BasePath | Out-Null
-                $HashDirectory.Add($hash.Path, $hash.Hash)
+                if ($HashDirectory[$filePath] -ne $hash.Hash) {
+                    # Notify user of file modification
+                    Write-Host "$($filePath) has changed!!!" -ForegroundColor DarkRed -BackgroundColor White
+                    
+                    # Create backup before updating hash
+                    Log-Change -FilePath $filePath -ChangeType "Modified" -Hash $hash.Hash -BasePath $BasePath | Out-Null
+                    $HashDirectory[$filePath] = $hash.Hash
+                }
             }
-            elseif ($HashDirectory[$hash.Path] -ne $hash.Hash) {
-                # Notify user of file modification
-                Write-Host "$($hash.Path) has changed!!!" -ForegroundColor DarkRed -BackgroundColor White
-                Log-Change -FilePath $hash.Path -ChangeType "Modified" -Hash $hash.Hash -BasePath $BasePath | Out-Null
-                $HashDirectory[$hash.Path] = $hash.Hash
-            }
-        }
-        
-        # Check for deleted files
-        foreach ($key in $HashDirectory.Keys) {
-            if (-Not (Test-Path -Path $key)) {
-                # One of the baseline files has been deleted
-                Write-Host "$($key) has been deleted!" -ForegroundColor DarkRed -BackgroundColor White
-                Log-Change -FilePath $key -ChangeType "Deleted" -Hash $HashDirectory[$key] -BasePath $BasePath | Out-Null
+            else {
+                # File was deleted
+                Write-Host "$($filePath) has been deleted!" -ForegroundColor DarkRed -BackgroundColor White
+                Log-Change -FilePath $filePath -ChangeType "Deleted" -Hash $HashDirectory[$filePath] -BasePath $BasePath | Out-Null
             }
         }
     }

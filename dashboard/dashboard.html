@@ -256,6 +256,146 @@
             color: #999;
             font-size: 13px;
         }
+
+        /* Upload Modal Styles */
+        .modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.5);
+            justify-content: center;
+            align-items: center;
+            z-index: 1000;
+        }
+
+        .modal-content {
+            background: white;
+            padding: 30px;
+            border-radius: 10px;
+            max-width: 500px;
+            width: 90%;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2);
+        }
+
+        .modal-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+        }
+
+        .modal-header h2 {
+            color: #333;
+            font-size: 20px;
+            margin: 0;
+        }
+
+        .close-btn {
+            background: none;
+            border: none;
+            font-size: 24px;
+            color: #999;
+            cursor: pointer;
+            padding: 0;
+            width: 30px;
+            height: 30px;
+        }
+
+        .close-btn:hover {
+            color: #333;
+        }
+
+        .upload-area {
+            border: 2px dashed #667eea;
+            border-radius: 10px;
+            padding: 40px;
+            text-align: center;
+            margin-bottom: 20px;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+
+        .upload-area:hover {
+            background: #f8f9ff;
+            border-color: #5568d3;
+        }
+
+        .upload-area.drag-over {
+            background: #f0f4ff;
+            border-color: #5568d3;
+        }
+
+        .upload-icon {
+            font-size: 48px;
+            margin-bottom: 10px;
+        }
+
+        .file-list {
+            max-height: 200px;
+            overflow-y: auto;
+            margin-bottom: 20px;
+        }
+
+        .file-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 10px;
+            background: #f8f9fa;
+            border-radius: 5px;
+            margin-bottom: 8px;
+        }
+
+        .file-item-name {
+            font-size: 14px;
+            color: #333;
+            flex: 1;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        .remove-file-btn {
+            background: #f44336;
+            color: white;
+            border: none;
+            padding: 4px 10px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 12px;
+        }
+
+        .upload-btn {
+            width: 100%;
+            background: #667eea;
+            color: white;
+            border: none;
+            padding: 12px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 16px;
+            font-weight: 600;
+            transition: background 0.3s;
+        }
+
+        .upload-btn:hover {
+            background: #5568d3;
+        }
+
+        .upload-btn:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+        }
+
+        .upload-status {
+            text-align: center;
+            margin-top: 15px;
+            color: #666;
+            font-size: 14px;
+        }
     </style>
 </head>
 <body>
@@ -292,7 +432,10 @@
         <div class="changes-section">
             <div class="section-header">
                 <h2>Change History</h2>
-                <button class="refresh-btn" onclick="loadChanges()">🔄 Refresh</button>
+                <div style="display: flex; gap: 10px;">
+                    <button class="refresh-btn" onclick="document.getElementById('uploadModal').style.display='flex'">📤 Upload Files</button>
+                    <button class="refresh-btn" onclick="loadChanges()">🔄 Refresh</button>
+                </div>
             </div>
 
             <div class="filter-bar">
@@ -312,9 +455,33 @@
         </div>
     </div>
 
+    <!-- Upload Modal -->
+    <div id="uploadModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>📤 Upload Files to Monitor</h2>
+                <button class="close-btn" onclick="closeUploadModal()">&times;</button>
+            </div>
+            
+            <div class="upload-area" id="uploadArea" onclick="document.getElementById('fileInput').click()">
+                <div class="upload-icon">📁</div>
+                <p>Click or drag files here to upload</p>
+                <p style="color: #999; font-size: 12px;">Files will be added to monitoring</p>
+            </div>
+            
+            <input type="file" id="fileInput" multiple style="display: none;" onchange="handleFileSelect(event)">
+            
+            <div id="fileList" class="file-list"></div>
+            
+            <button class="upload-btn" id="uploadBtn" onclick="uploadFiles()" disabled>Upload Files</button>
+            <div id="uploadStatus" class="upload-status"></div>
+        </div>
+    </div>
+
     <script>
         let allChanges = [];
         let currentFilter = 'all';
+        let selectedFiles = [];
 
         // Check authentication
         const authToken = localStorage.getItem('authToken');
@@ -486,6 +653,115 @@
             localStorage.removeItem('username');
             window.location.href = 'login.html';
         }
+
+        // Upload Modal Functions
+        function closeUploadModal() {
+            document.getElementById('uploadModal').style.display = 'none';
+            selectedFiles = [];
+            updateFileList();
+        }
+
+        function handleFileSelect(event) {
+            const files = Array.from(event.target.files);
+            selectedFiles = [...selectedFiles, ...files];
+            updateFileList();
+        }
+
+        function updateFileList() {
+            const fileListDiv = document.getElementById('fileList');
+            const uploadBtn = document.getElementById('uploadBtn');
+            
+            if (selectedFiles.length === 0) {
+                fileListDiv.innerHTML = '';
+                uploadBtn.disabled = true;
+                return;
+            }
+            
+            uploadBtn.disabled = false;
+            let html = '';
+            selectedFiles.forEach((file, index) => {
+                html += `
+                    <div class="file-item">
+                        <span class="file-item-name">📄 ${file.name}</span>
+                        <button class="remove-file-btn" onclick="removeFile(${index})">Remove</button>
+                    </div>
+                `;
+            });
+            fileListDiv.innerHTML = html;
+        }
+
+        function removeFile(index) {
+            selectedFiles.splice(index, 1);
+            updateFileList();
+        }
+
+        async function uploadFiles() {
+            if (selectedFiles.length === 0) return;
+            
+            const uploadBtn = document.getElementById('uploadBtn');
+            const statusDiv = document.getElementById('uploadStatus');
+            
+            uploadBtn.disabled = true;
+            statusDiv.textContent = 'Uploading...';
+            
+            const formData = new FormData();
+            selectedFiles.forEach((file) => {
+                formData.append('files', file);
+            });
+            
+            try {
+                const response = await fetch('http://localhost:8080/api/upload', {
+                    method: 'POST',
+                    headers: {
+                        'Authorization': `Bearer ${authToken}`
+                    },
+                    body: formData
+                });
+                
+                const data = await response.json();
+                
+                if (data.success) {
+                    statusDiv.textContent = `✅ ${data.filesUploaded} file(s) uploaded and added to monitoring!`;
+                    statusDiv.style.color = '#4caf50';
+                    setTimeout(() => {
+                        closeUploadModal();
+                        loadChanges();
+                    }, 2000);
+                } else {
+                    statusDiv.textContent = '❌ Upload failed: ' + (data.message || 'Unknown error');
+                    statusDiv.style.color = '#f44336';
+                    uploadBtn.disabled = false;
+                }
+            } catch (error) {
+                console.error('Upload error:', error);
+                statusDiv.textContent = '❌ Upload failed. Please try again.';
+                statusDiv.style.color = '#f44336';
+                uploadBtn.disabled = false;
+            }
+        }
+
+        // Drag and drop support
+        window.addEventListener('DOMContentLoaded', () => {
+            const uploadArea = document.getElementById('uploadArea');
+            
+            uploadArea.addEventListener('dragover', (e) => {
+                e.preventDefault();
+                uploadArea.classList.add('drag-over');
+            });
+            
+            uploadArea.addEventListener('dragleave', () => {
+                uploadArea.classList.remove('drag-over');
+            });
+            
+            uploadArea.addEventListener('drop', (e) => {
+                e.preventDefault();
+                uploadArea.classList.remove('drag-over');
+                
+                const files = Array.from(e.dataTransfer.files);
+                selectedFiles = [...selectedFiles, ...files];
+                updateFileList();
+            });
+        });
 
         // Load changes on page load
         loadChanges();
