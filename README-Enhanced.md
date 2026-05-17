@@ -5,29 +5,29 @@ An advanced PowerShell-based File Integrity Monitor with version control, web da
 ## Features
 
 ### Core Monitoring
-- ✅ Collect a baseline of files using SHA512 hashing
-- ✅ Continuously monitor file changes, additions, and deletions
-- ✅ Real-time notifications for file integrity violations
+-  Collect a baseline of files using SHA512 hashing
+-  Continuously monitor file changes, additions, and deletions
+-  Real-time notifications for file integrity violations
 
 ### Version Control & Recovery
-- ✅ Automatic version history tracking with timestamps
-- ✅ Restore files to previous versions (like Git version control)
-- ✅ Complete change log with all file modifications
-- ✅ Version snapshots stored securely
+-  Automatic version history tracking with timestamps
+-  Restore files to previous versions (like Git version control)
+-  Complete change log with all file modifications
+-  Version snapshots stored securely
 
 ### Web Dashboard
-- ✅ Modern, responsive web interface
-- ✅ Secure login with encrypted credentials
-- ✅ Real-time change statistics and visualizations
-- ✅ Filter and search through change history
-- ✅ One-click file restoration to previous versions
-- ✅ Auto-refresh every 10 seconds
+-  Modern, responsive web interface
+-  Secure login with encrypted credentials
+-  Real-time change statistics and visualizations
+-  Filter and search through change history
+-  One-click file restoration to previous versions
+-  Auto-refresh every 10 seconds
 
 ### Security
-- ✅ First-run credential setup
-- ✅ Password hashing with salt
-- ✅ Authentication required for dashboard access
-- ✅ Secure token-based sessions
+-  First-run credential setup
+-  Password hashing with salt
+- Authentication required for dashboard access
+-  Secure token-based sessions
 
 ## Requirements
 - Windows OS
